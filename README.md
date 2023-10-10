@@ -37,6 +37,8 @@ openai_api_sa_base = "https://xxxx.openai.azure.com"
 
 ***4*** Load tariff data
 
+Run `ingest/download-tariffs.py`
+
 Run `ingest/ingest_tariff_ada.py`
 
 Run `ingest/ingest_tariff_bym.py`
