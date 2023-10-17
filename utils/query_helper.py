@@ -6,6 +6,7 @@ from utils.openai_embedder import get_embedding
 
 from utils.openai_helper import get_openai_guidance, get_openai_guidance_no_context, \
     get_openai_large_guidance
+from variables import ner_model
 
 
 def build_bm25_query(user_query, selected_authors=[], selected_states=[], selected_companies=[] ):
@@ -572,14 +573,17 @@ def build_elser_query(user_query, selected_authors, selected_states, selected_co
 
 
 
-def build_openai_query(embeddings, selected_states=[], selected_companies=[]):
+import json
+
+def build_openai_query(embeddings, selected_states=[], selected_companies=[], optional_state=None):
     """
     Builds an Elasticsearch KNN query using OpenAI embeddings and includes aggregations.
 
     Parameters:
     - embeddings: The vector embeddings.
-    - selected_authors (optional): List of selected authors.
     - selected_states (optional): List of selected states.
+    - selected_companies (optional): List of selected companies.
+    - optional_state (optional): State value for the should clause.
 
     Returns:
     - A dictionary representing the Elasticsearch KNN query.
@@ -594,7 +598,7 @@ def build_openai_query(embeddings, selected_states=[], selected_companies=[]):
     }
 
     filters = []
-
+    bool_query = {}
 
     # If states are selected, add the state filter
     if selected_states:
@@ -612,12 +616,22 @@ def build_openai_query(embeddings, selected_states=[], selected_companies=[]):
             }
         })
 
-    # If there are any filters, add them to the KNN query
-    if filters:
-        knn_query["filter"] = {
-            "bool": {
-                "filter": filters
+    # If there's an optional_state, add the should clause
+    if optional_state:
+        bool_query["should"] = {
+            "term": {
+                "metadata.state.keyword": optional_state
             }
+        }
+
+    # If there are any filters, add them to the bool query
+    if filters:
+        bool_query["filter"] = filters
+
+    # If the bool_query is not empty, add it to the knn_query
+    if bool_query:
+        knn_query["filter"] = {
+            "bool": bool_query
         }
 
     # Final query structure including aggregations
@@ -657,6 +671,27 @@ def build_openai_query(embeddings, selected_states=[], selected_companies=[]):
     return full_query
 
 
+def get_loc_entity(result):
+    for doc in result.get('inference_results', []):
+        entities = doc.get('entities', [])
+        for entity in entities:
+            if entity['class_name'] == "LOC":
+                return entity['entity']
+    return None  # Return None if no LOC entity is found
+
+
+
+
+def run_ner_inference(es, input_text):
+    docs = [{"text_field": input_text}]
+
+    # Use the infer_trained_model method
+    response = es.ml.infer_trained_model(model_id=ner_model, docs=docs)
+
+    return get_loc_entity(response)
+
+
+
 
 
 def search_tariffs(es, user_query, searchtype, BM25_Boost, KNN_Boost, rrf_rank_constant, rrf_window_size,
@@ -675,7 +710,7 @@ def search_tariffs(es, user_query, searchtype, BM25_Boost, KNN_Boost, rrf_rank_c
     elif searchtype == "Elser Hybrid":
         query = build_elser_hybrid_query(user_query, selected_authors, selected_states, selected_companies, BM25_Boost, KNN_Boost)
     elif searchtype == "Vector OpenAI":
-        query = build_openai_query(get_embedding(user_query), selected_states, selected_companies)
+        query = build_openai_query(get_embedding(user_query), selected_states, selected_companies, run_ner_inference(es, user_query))
     elif searchtype == "GenAI":
         print("GenAI Search Only")
     else:
