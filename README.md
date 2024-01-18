@@ -3,7 +3,7 @@
 
 ## Setup
 
-***1*** Import Embedding model into ESS
+***1*** Import Embedding and NER model into ESS
 ```commandline
 docker run -it --rm elastic/eland
     eland_import_hub_model
@@ -13,6 +13,14 @@ docker run -it --rm elastic/eland
     --start
 ```
 
+```commandline
+docker run -it --rm elastic/eland
+    eland_import_hub_model
+    --cloud-id xxxxx -u xxxxxxxx -p xxxxxxxx
+    --hub-model-id elastic__distilbert-base-uncased-finetuned-conll03-english
+    --task-type ner
+    --start
+```
 ***2*** Start ELSER model in ESS
 
 
